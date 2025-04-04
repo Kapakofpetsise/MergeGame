@@ -7,10 +7,8 @@ public class MergeItem : MonoBehaviour, IPointerDownHandler, IDragHandler, IPoin
 {
     public ItemDefinition definition;
 
-    // --- Add Grid Position Storage ---
     public int gridX { get; private set; }
     public int gridY { get; private set; }
-    // --------------------------------
 
     private SpriteRenderer spriteRenderer;
     private Collider2D itemCollider;
@@ -27,11 +25,9 @@ public class MergeItem : MonoBehaviour, IPointerDownHandler, IDragHandler, IPoin
         mainCamera = Camera.main;
     }
 
-    // Start remains the same (or can be empty now)
     void Start() { ApplyDefinition(); }
 
 #if UNITY_EDITOR
-    // OnValidate remains the same
     void OnValidate()
     {
         UnityEditor.EditorApplication.delayCall += () =>
@@ -55,50 +51,46 @@ public class MergeItem : MonoBehaviour, IPointerDownHandler, IDragHandler, IPoin
         if (spriteRenderer == null) spriteRenderer = GetComponent<SpriteRenderer>();
         ApplyDefinition();
 
-        // --- Removed direct access to gridSlots ---
-        // The GridManager.SpawnItemAt method already places the item at the correct position during Instantiate.
-        // We just need to record that starting position here so snap-back works correctly.
         originalPosition = transform.position;
-        // -------------------------------------------
+
     }
 
-    // ApplyDefinition and ApplyDefinitionVisualsOnly remain the same
     private void ApplyDefinition()
-{
-    if (definition != null)
     {
-        ApplyDefinitionVisualsOnly();
-         gameObject.name = definition.displayName; // Using displayName now
+        if (definition != null)
+        {
+            ApplyDefinitionVisualsOnly();
+            gameObject.name = definition.displayName;
+        }
+        else
+        {
+            Debug.LogError("MergeItem is missing its definition!", this);
+            if (spriteRenderer != null) spriteRenderer.enabled = false;
+            gameObject.name = "MergeItem (Missing Definition)";
+        }
     }
-    else
+
+    private void ApplyDefinitionVisualsOnly()
     {
-         Debug.LogError("MergeItem is missing its definition!", this);
-         if (spriteRenderer != null) spriteRenderer.enabled = false; // Check if renderer gets disabled here
-          gameObject.name = "MergeItem (Missing Definition)";
+        // You can add temporary debug logs here later if needed:
+        // Debug.Log($"ApplyVisuals: Def='{definition?.name}', Renderer='{(spriteRenderer ? "OK" : "NULL")}', Sprite='{definition?.itemSprite?.name}'");
+
+        if (definition != null && spriteRenderer != null)
+        {
+            spriteRenderer.sprite = definition.itemSprite; // The key line
+            spriteRenderer.enabled = true; // Ensure it's enabled
+        }
+        else if (spriteRenderer != null) // If definition is null BUT renderer exists
+        {
+            // This path might be taken if definition is null, hiding the sprite
+            spriteRenderer.sprite = null;
+            spriteRenderer.enabled = false;
+            Debug.LogWarning($"ApplyVisualsOnly called with null definition for {gameObject.name}. Disabling renderer.");
+        }
+        // Implicit else: if spriteRenderer is null, nothing happens here.
     }
-}
 
-private void ApplyDefinitionVisualsOnly()
-{
-    // You can add temporary debug logs here later if needed:
-    // Debug.Log($"ApplyVisuals: Def='{definition?.name}', Renderer='{(spriteRenderer ? "OK" : "NULL")}', Sprite='{definition?.itemSprite?.name}'");
 
-    if (definition != null && spriteRenderer != null)
-    {
-        spriteRenderer.sprite = definition.itemSprite; // The key line
-        spriteRenderer.enabled = true; // Ensure it's enabled
-    }
-     else if (spriteRenderer != null) // If definition is null BUT renderer exists
-     {
-         // This path might be taken if definition is null, hiding the sprite
-         spriteRenderer.sprite = null;
-         spriteRenderer.enabled = false;
-         Debug.LogWarning($"ApplyVisualsOnly called with null definition for {gameObject.name}. Disabling renderer.");
-     }
-     // Implicit else: if spriteRenderer is null, nothing happens here.
-}
-
-    // OnPointerDown and OnDrag remain the same
     public void OnPointerDown(PointerEventData eventData)
     {
         if (!enabled) return;
@@ -121,14 +113,14 @@ private void ApplyDefinitionVisualsOnly()
 
         // Optional: Bring item visually to the front while dragging (uncomment if needed)
         // if (spriteRenderer != null) spriteRenderer.sortingOrder = 10;
-         if (itemCollider != null) itemCollider.enabled = false; // Disable collider temporarily
+        if (itemCollider != null) itemCollider.enabled = false; // Disable collider temporarily
 
         Debug.Log($"Pointer Down on {gameObject.name}");
     }
 
     public void OnDrag(PointerEventData eventData)
     {
-         if (!enabled || !isDragging) return;
+        if (!enabled || !isDragging) return;
 
         // --- Corrected World Point Calculation ---
         // 1. Get the mouse/touch position
@@ -137,7 +129,7 @@ private void ApplyDefinitionVisualsOnly()
         screenPoint.z = mainCamera.WorldToScreenPoint(transform.position).z;
         // 3. Convert to world point
         Vector3 worldPoint = mainCamera.ScreenToWorldPoint(screenPoint);
-         // --- End Correction ---
+        // --- End Correction ---
 
         // Calculate the new position by applying the offset
         Vector3 newPos = worldPoint + offset;
@@ -150,70 +142,85 @@ private void ApplyDefinitionVisualsOnly()
         transform.position = newPos;
     }
 
-    // (OnPointerUp remains the same as before)
-
-    // --- Implement Merge Logic in OnPointerUp ---
     public void OnPointerUp(PointerEventData eventData)
     {
-        if (!enabled || !isDragging) return; // Added check for enabled
+        if (!enabled || !isDragging) return;
 
         isDragging = false;
-        if (itemCollider != null) itemCollider.enabled = true; // Re-enable collider BEFORE checks
-        // if (spriteRenderer != null) spriteRenderer.sortingOrder = 0; // Reset sorting order
+        if (itemCollider != null) itemCollider.enabled = true;
 
-        // Get current world position (where it was dropped)
         Vector3 dropPosition = transform.position;
-
-        // Try to convert drop position to grid coordinates
         Vector2Int? targetCoordsNullable = GridManager.Instance.WorldToGridCoords(dropPosition);
 
-        bool merged = false; // Flag to track if a merge occurred
+        bool actionTaken = false;
 
         if (targetCoordsNullable.HasValue)
         {
             Vector2Int targetCoords = targetCoordsNullable.Value;
             MergeItem targetItem = GridManager.Instance.GetItemAt(targetCoords.x, targetCoords.y);
 
-            // --- Merge Check ---
-            if (targetItem != null && // Is there an item in the target slot?
-                targetItem != this && // Is it not the item we just dropped?
-                this.definition != null && // Does the dragged item have a definition?
-                this.definition.nextLevelDefinition != null && // Can the dragged item actually merge up?
-                targetItem.definition == this.definition) // Do the items have the same definition (level/type)?
+            // --- Attempt Merge ---
+            if (CanMergeWith(targetItem))
             {
                 Debug.Log($"Valid Merge detected at ({targetCoords.x},{targetCoords.y})!");
-                merged = true;
+                actionTaken = true;
 
-                // 1. Get the definition for the new item
                 ItemDefinition nextLevelDef = this.definition.nextLevelDefinition;
 
-                // 2. Clear the grid slots in the GridManager's data
-                GridManager.Instance.ClearSlotAt(this.gridX, this.gridY); // Clear original slot
-                GridManager.Instance.ClearSlotAt(targetCoords.x, targetCoords.y); // Clear target slot
-
-                // 3. Destroy the existing game objects
-                Destroy(targetItem.gameObject); // Destroy the item we dropped onto
-                Destroy(this.gameObject); // Destroy the item we dragged
-
-                // 4. Spawn the new merged item in the target slot
-                GridManager.Instance.SpawnItemAt(nextLevelDef, targetCoords.x, targetCoords.y);
+                if (nextLevelDef == null) {
+                     Debug.LogError($"Merge failed: Next level definition is null for {this.definition.name}");
+                     actionTaken = false;
+                } else {
+                    GridManager.Instance.ClearSlotAt(this.gridX, this.gridY); 
+                    GridManager.Instance.ClearSlotAt(targetCoords.x, targetCoords.y);
+                    
+                    Destroy(targetItem.gameObject);
+                    GridManager.Instance.SpawnItemAt(nextLevelDef, targetCoords.x, targetCoords.y);
+                    Destroy(this.gameObject);
+                }
             }
-            // --- End Merge Check ---
 
-            // --- Add Move Logic Here Later (Optional) ---
-            // If target slot is empty, could move item here instead of snapping back
-            // else if (targetItem == null) { ... move logic ... }
-            // --------------------------------------------
+            // --- Attempt Move to Empty Slot ---
+            else if (targetItem == null &&
+                    (targetCoords.x != this.gridX || targetCoords.y != this.gridY))
+            {
+                Debug.Log($"Moving item to empty slot ({targetCoords.x},{targetCoords.y})");
+                actionTaken = true;
 
-        } // End if targetCoordsNullable.HasValue
+                Vector2 newPosition = GridManager.Instance.GetSlotPosition(targetCoords.x, targetCoords.y);
 
-        // If no merge occurred (dropped off-grid, on self, on mismatch, or on empty)
-        if (!merged)
+                if (newPosition.x != float.PositiveInfinity)
+                {
+                    GridManager.Instance.ClearSlotAt(this.gridX, this.gridY);
+
+                    GridManager.Instance.SetItemAt(this, targetCoords.x, targetCoords.y);
+
+                    this.gridX = targetCoords.x;
+                    this.gridY = targetCoords.y;
+
+                    transform.position = newPosition;
+
+                    originalPosition = newPosition;
+                }
+                else
+                {
+                    actionTaken = false;
+                    Debug.LogWarning("Failed to get target slot position for move.");
+                }
+            }
+        }
+        // --- If NO Action Occurred (Merge or Move) ---
+        // This handles: Dropping off-grid, dropping back on original slot, dropping on incompatible item.
+        if (!actionTaken)
         {
-            // Snap back to the original position
             transform.position = originalPosition;
         }
-        // Note: If a merge happened, 'this' object is destroyed, so snapping back won't occur.
     }
-    // --------------------------------------
+
+    private bool CanMergeWith(MergeItem targetItem)
+    {
+        if (targetItem == null || targetItem == this) return false;
+        if (this.definition == null || this.definition.nextLevelDefinition == null) return false;
+        return targetItem.definition == this.definition;
+    }
 }

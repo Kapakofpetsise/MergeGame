@@ -465,10 +465,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2e5117a0f0807fd4ea25d2c784ab2b71, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  width: 5
-  height: 5
-  cellSize: 1.5
-  gridOrigin: {x: -3.75, y: -3.75}
+  width: 7
+  height: 9
+  cellSize: 0.75
+  gridOrigin: {x: -2.625, y: -3.375}
   mergeItemPrefab: {fileID: 1087440263784217199, guid: 8c7b5d04b5cfc73428012b0075d885c1, type: 3}
   initialItemDefinition: {fileID: 11400000, guid: 55d30cefd1bbb99488051263af09926b, type: 2}
 --- !u!4 &1229432753
