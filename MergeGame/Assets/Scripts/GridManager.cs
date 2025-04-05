@@ -186,7 +186,20 @@ public class GridManager : MonoBehaviour
         slot.currentItem = item;
     }
 
-
+    public Vector2Int? FindEmptySlot()
+    {
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (gridSlots != null && IsValidCoord(x, y) && !gridSlots[x, y].isOccupied)
+                {
+                    return new Vector2Int(x, y);
+                }
+            }
+        }
+        return null;
+    }
 
 
 
